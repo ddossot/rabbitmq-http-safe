@@ -8,10 +8,10 @@ start_link() ->
 
 init([]) ->
   {ok, {{one_for_one, 3, 10},
-        [{rabbitmq_http_safe_worker,
-          {rabbitmq_http_safe_worker, start_link, []},
+        [{rabbitmq_http_safe_acceptor,
+          {rabbitmq_http_safe_acceptor, start_link, []},
           permanent,
           10000,
           worker,
-          [rabbitmq_http_safe_worker]}
+          [rabbitmq_http_safe_acceptor]}
         ]}}.

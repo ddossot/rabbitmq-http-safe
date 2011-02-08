@@ -4,7 +4,7 @@
   {modules, [
     rabbitmq_http_safe,
     rabbitmq_http_safe_sup,
-    rabbitmq_http_safe_worker
+    rabbitmq_http_safe_acceptor
   ]},
   {registered, []},
   {mod, {rabbitmq_http_safe, []}},

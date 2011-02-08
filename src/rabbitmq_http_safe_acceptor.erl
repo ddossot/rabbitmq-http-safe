@@ -1,4 +1,4 @@
--module(rabbitmq_http_safe_worker).
+-module(rabbitmq_http_safe_acceptor).
 -behaviour(gen_server).
 
 -export([start_link/0]).
@@ -6,7 +6,7 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--record(state, {}).
+-record(state, {channel}).
 
 start_link() ->
   gen_server:start_link({global, ?MODULE}, ?MODULE, [], []).
@@ -16,7 +16,9 @@ start_link() ->
 % --------------------------
 
 init([]) ->
-  {ok, #state{}}.
+  {ok, Connection} = amqp_connection:start(direct),
+  {ok, Channel} = amqp_connection:open_channel(Connection),
+  {ok, #state{channel = Channel}}.
 
 handle_call(_Msg, _From, State) ->
   {reply, ok, State}.
@@ -27,7 +29,8 @@ handle_cast(_, State) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_, _State) ->
+terminate(_, #state{channel = Channel}) ->
+    amqp_channel:close(Channel),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
