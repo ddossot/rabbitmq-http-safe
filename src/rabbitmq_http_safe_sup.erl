@@ -1,3 +1,11 @@
+%%%
+%%% @doc HTTP SAFE - Supervisor
+%%% @author David Dossot <david@dossot.net>
+%%%
+%%% See LICENSE for license information.
+%%% Copyright (c) 2011 David Dossot
+%%%
+
 -module(rabbitmq_http_safe_sup).
 -behaviour(supervisor).
 

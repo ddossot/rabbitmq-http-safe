@@ -1,15 +1,28 @@
+%%%
+%%% @doc HTTP SAFE - Main
+%%% @author David Dossot <david@dossot.net>
+%%%
+%%% See LICENSE for license information.
+%%% Copyright (c) 2011 David Dossot
+%%%
+
 -module(rabbitmq_http_safe).
+
+-include("rabbitmq_http_safe.hrl").
 
 -export([start/2, stop/1]).
 
 -define(PREFIX, "http-safe").
 
 start(normal, []) ->
-  % TODO move to router module
+  rabbitmq_setup(),
+
   rabbit_mochiweb:register_context_handler(?PREFIX,
                                            fun(Req) ->
                                              io:format("~1024p~n", [Req]),
-                                             Req:ok({200, [{"Content-Type", "text/plain"}], "@@@ HTTP SAFE @@@"})
+                                             CorrelationId = rabbit_guid:string_guid("safe-"),
+                                             % FIXME dispatch to acceptor
+                                             Req:respond({202, [{"Content-Type", "text/plain"}], CorrelationId})
                                            end,
                                            "HTTP SAFE"),
 
@@ -17,3 +30,28 @@ start(normal, []) ->
 
 stop(_State) ->
   ok.
+  
+%% Private Functions
+rabbitmq_setup() ->
+  create_vhost_if_needed(),
+  create_user_if_needed(),
+  set_user_permissions(),
+  ok.
+
+create_vhost_if_needed() ->
+  case rabbit_vhost:exists(?VHOST) of
+    true  -> ok;
+    false -> rabbit_vhost:add(?VHOST)
+  end.
+
+create_user_if_needed() ->
+  case rabbit_auth_backend_internal:lookup_user(?USERNAME) of
+    {ok, _} ->
+      ok;
+    {error,not_found} ->
+      rabbit_auth_backend_internal:add_user(?USERNAME, ?PASSWORD)
+  end.
+
+set_user_permissions() ->
+  rabbit_auth_backend_internal:set_permissions(?USERNAME, ?VHOST , <<".*">>, <<".*">>, <<".*">>).
+
