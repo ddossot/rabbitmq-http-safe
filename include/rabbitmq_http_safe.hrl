@@ -20,3 +20,8 @@
                                                                type = <<"fanout">>,
                                                                durable = true,
                                                                auto_delete = false}).
+                                                               
+-define(CID_HEADER, "X-SAFE-Correlation-Id").
+-define(TARGET_URI_HEADER, "X-SAFE-Target-URI").
+-define(CALLBACK_URI_HEADER, "X-SAFE-Callback-URI").
+

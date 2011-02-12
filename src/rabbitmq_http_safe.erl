@@ -18,12 +18,7 @@ start(normal, []) ->
   rabbitmq_setup(),
 
   rabbit_mochiweb:register_context_handler(?PREFIX,
-                                           fun(Req) ->
-                                             io:format("~1024p~n", [Req]),
-                                             CorrelationId = rabbit_guid:string_guid("safe-"),
-                                             % FIXME dispatch to acceptor
-                                             Req:respond({202, [{"Content-Type", "text/plain"}], CorrelationId})
-                                           end,
+                                           fun rabbitmq_http_safe_acceptor:handle/1,
                                            "HTTP SAFE"),
 
   rabbitmq_http_safe_sup:start_link().

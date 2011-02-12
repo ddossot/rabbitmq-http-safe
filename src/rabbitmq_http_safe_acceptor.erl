@@ -11,15 +11,28 @@
 
 -include("rabbitmq_http_safe.hrl").
 
--export([start_link/0]).
+-export([start_link/0, handle/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-define(SERVER, ?MODULE).
+
 -record(state, {connection, channel}).
 
 start_link() ->
-  gen_server:start_link({global, ?MODULE}, ?MODULE, [], []).
+  gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+  
+handle(Req) ->
+  case Req:get_header_value(?TARGET_URI_HEADER) of
+    undefined ->
+      Req:respond({400, [], "Missing mandatory header: " ++ ?TARGET_URI_HEADER});
+      
+    Value ->
+      CorrelationId = rabbit_guid:string_guid("safe-"),
+      % FIXME gen_cast to ?SERVER
+      Req:respond({204, [{?CID_HEADER, CorrelationId}], []})
+  end.
 
 %---------------------------
 % Gen Server Implementation
@@ -49,3 +62,4 @@ terminate(_, #state{connection = Connection, channel = Channel}) ->
 
 code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
+

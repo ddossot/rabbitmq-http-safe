@@ -9,5 +9,5 @@
   {registered, []},
   {mod, {rabbitmq_http_safe, []}},
   {env, []},
-  {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
+  {applications, [kernel, stdlib, rabbit, amqp_client, ibrowse]}]}.
 
