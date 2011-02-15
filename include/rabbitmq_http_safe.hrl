@@ -23,5 +23,6 @@
                                                                
 -define(CID_HEADER, "X-SAFE-Correlation-Id").
 -define(TARGET_URI_HEADER, "X-SAFE-Target-URI").
+-define(TARGET_MAX_RETRIES_HEADER, "X-SAFE-Max-Retries").
 -define(CALLBACK_URI_HEADER, "X-SAFE-Callback-URI").
 

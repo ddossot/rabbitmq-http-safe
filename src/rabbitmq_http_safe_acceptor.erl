@@ -24,15 +24,28 @@ start_link() ->
   gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
   
 handle(Req) ->
-  case Req:get_header_value(?TARGET_URI_HEADER) of
-    undefined ->
-      Req:respond({400, [], "Missing mandatory header: " ++ ?TARGET_URI_HEADER});
-      
-    Value ->
-      CorrelationId = rabbit_guid:string_guid("safe-"),
-      % FIXME gen_cast to ?SERVER
-      Req:respond({204, [{?CID_HEADER, CorrelationId}], []})
-  end.
+  handle(Req,
+         Req:get_header_value(?TARGET_URI_HEADER),
+         Req:get_header_value(?TARGET_MAX_RETRIES_HEADER)).
+
+handle(Req, undefined, _) ->
+  Req:respond({400, [], "Missing mandatory header: " ++ ?TARGET_URI_HEADER});
+handle(Req, _, undefined) ->
+  Req:respond({400, [], "Missing mandatory header: " ++ ?TARGET_MAX_RETRIES_HEADER});
+handle(Req, TargetUri, MaxRetriesString)
+  when is_list(TargetUri), is_list(MaxRetriesString) ->
+  handle(Req, TargetUri, catch(list_to_integer(MaxRetriesString)));
+handle(Req, TargetUri, MaxRetries)
+  when is_list(TargetUri), is_integer(MaxRetries) ->
+  % FIXME gen_cast to ?SERVER
+  CorrelationId = rabbit_guid:string_guid("safe-"),
+  Req:respond({204, [{?CID_HEADER, CorrelationId}], []});
+handle(Req, _, MaxRetries)
+  when is_integer(MaxRetries) ->
+  Req:respond({400, [], "Invalid value for header: " ++ ?TARGET_URI_HEADER});
+handle(Req, TargetUri, _)
+  when is_list(TargetUri) ->
+  Req:respond({400, [], "Invalid value for header: " ++ ?TARGET_MAX_RETRIES_HEADER}).
 
 %---------------------------
 % Gen Server Implementation
