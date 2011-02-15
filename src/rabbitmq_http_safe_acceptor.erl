@@ -21,7 +21,7 @@
 -record(state, {connection, channel}).
 
 start_link() ->
-  gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
   
 handle(Req) ->
   handle(Req,
@@ -37,8 +37,17 @@ handle(Req, TargetUri, MaxRetriesString)
   handle(Req, TargetUri, catch(list_to_integer(MaxRetriesString)));
 handle(Req, TargetUri, MaxRetries)
   when is_list(TargetUri), is_integer(MaxRetries) ->
-  % FIXME gen_cast to ?SERVER
   CorrelationId = rabbit_guid:string_guid("safe-"),
+  gen_server:cast(?SERVER,
+                  {http_request, [
+                                  {correlation_id, CorrelationId},
+                                  {target_uri, TargetUri},
+                                  {max_retries, MaxRetries},
+                                  {method, list_to_atom(string:to_lower(atom_to_list(Req:get(method))))},
+                                  {headers, mochiweb_headers:to_list(Req:get(headers))},
+                                  {body, Req:recv_body()}
+                                 ]}),
+  % TODO support HTTP version
   Req:respond({204, [{?CID_HEADER, CorrelationId}], []});
 handle(Req, _, MaxRetries)
   when is_integer(MaxRetries) ->
@@ -59,11 +68,22 @@ init([]) ->
   
   {ok, #state{connection = Connection, channel = Channel}}.
 
-handle_call(_Msg, _From, State) ->
-  {reply, ok, State}.
+handle_call(InvalidMessage, _From, State) ->
+  {reply, {error, {invalid_message, InvalidMessage}}, State}.
+
+handle_cast(HttpRequest = {http_request, Fields}, State=#state{channel = Channel})
+  when is_list(Fields)->
+  
+  Properties = #'P_basic'{content_type = ?ERLANG_BINARY_TERM_CONTENT_TYPE,
+                          delivery_mode = 2},
+  BasicPublish = #'basic.publish'{exchange = ?PENDING_REQUESTS_EXCHANGE},
+  Content = #amqp_msg{props = Properties, payload = term_to_binary(HttpRequest)},
+  amqp_channel:call(Channel, BasicPublish, Content),
+  
+  {noreply, State};
 
 handle_cast(_, State) ->
-  {noreply,State}.
+  {noreply, State}.
 
 handle_info(_Info, State) ->
   {noreply, State}.

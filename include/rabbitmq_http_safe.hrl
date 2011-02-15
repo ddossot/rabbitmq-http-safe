@@ -20,6 +20,8 @@
                                                                type = <<"fanout">>,
                                                                durable = true,
                                                                auto_delete = false}).
+
+-define(ERLANG_BINARY_TERM_CONTENT_TYPE, <<"application/vnd.erlang.term">>).
                                                                
 -define(CID_HEADER, "X-SAFE-Correlation-Id").
 -define(TARGET_URI_HEADER, "X-SAFE-Target-URI").
