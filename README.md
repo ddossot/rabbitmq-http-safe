@@ -17,3 +17,5 @@ RabbitMQ HTTP SAFE (Store And Forward Engine)
 
 A store-and-forward HTTP gateway plug-in for RabbitMQ.
 
+
+XXX Limited to 1MB payloads

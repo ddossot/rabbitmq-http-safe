@@ -24,9 +24,67 @@ start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
   
 handle(Req) ->
+  % FIXME support TARGET_RETRY_INTERVAL_HEADER, if TARGET_MAX_RETRIES_HEADER > 0
+  
+  io:format("~n~1024p~n", [build_http_request(Req)]),
+  
   handle(Req,
          Req:get_header_value(?TARGET_URI_HEADER),
          Req:get_header_value(?TARGET_MAX_RETRIES_HEADER)).
+         
+build_http_request(Req) ->
+  TargetUriFun =
+    fun(_) ->
+      case Req:get_header_value(?TARGET_URI_HEADER) of
+        undefined ->
+          {error, "Missing mandatory header: " ++ ?TARGET_URI_HEADER};
+        TargetUri ->
+          {target_uri, TargetUri}
+       end
+    end,
+  
+  MaxRetriesFun =
+    fun(_) ->
+      case Req:get_header_value(?TARGET_MAX_RETRIES_HEADER) of
+        undefined ->
+          {max_retries, 0};
+        MaxRetriesString ->
+          try {max_retries, list_to_integer(MaxRetriesString)}
+          catch _:_ -> {error, "Invalid value for header: " ++ ?TARGET_MAX_RETRIES_HEADER}
+          end
+      end
+    end,
+  
+  RetryIntervalFun =
+    fun(Headers) ->
+      case proplists:get_value(max_retries, Headers) of
+        0 ->
+          undefined;
+        _ ->
+          try list_to_integer(Req:get_header_value(?TARGET_RETRY_INTERVAL_HEADER)) of
+            RetryInterval when RetryInterval > 0 andalso RetryInterval =< 60 ->
+              {retry_interval, RetryInterval};
+            _ ->
+              {error, "Invalid value for header: " ++ ?TARGET_RETRY_INTERVAL_HEADER}
+          catch
+            _:_ ->
+              {error, "Invalid value for header: " ++ ?TARGET_RETRY_INTERVAL_HEADER}
+          end
+      end
+    end,
+  
+  HeaderFuns = [TargetUriFun, MaxRetriesFun, RetryIntervalFun],
+  build_http_request(HeaderFuns, [{retry_count, 0}]).
+
+build_http_request([], HttpRequest) ->
+  {ok, {http_request, lists:flatten(HttpRequest)}};
+build_http_request([HeaderFun|HeaderFuns], Headers) ->
+  case HeaderFun(Headers) of
+    Error = {error, _} ->
+      Error;
+    Header ->
+      build_http_request(HeaderFuns, [Header|Headers])
+  end.
 
 handle(Req, undefined, _) ->
   Req:respond({400, [], "Missing mandatory header: " ++ ?TARGET_URI_HEADER});
@@ -43,9 +101,10 @@ handle(Req, TargetUri, MaxRetries)
                                   {correlation_id, CorrelationId},
                                   {target_uri, TargetUri},
                                   {max_retries, MaxRetries},
-                                  {method, list_to_atom(string:to_lower(atom_to_list(Req:get(method))))},
-                                  {headers, mochiweb_headers:to_list(Req:get(headers))},
-                                  {body, Req:recv_body()}
+                                  {retry_count, 0},
+                                  get_method(Req),
+                                  get_headers(Req),
+                                  get_body(Req)
                                  ]}),
   % TODO support HTTP version
   Req:respond({204, [{?CID_HEADER, CorrelationId}], []});
@@ -56,6 +115,28 @@ handle(Req, TargetUri, _)
   when is_list(TargetUri) ->
   Req:respond({400, [], "Invalid value for header: " ++ ?TARGET_MAX_RETRIES_HEADER}).
 
+get_method(Req) ->
+  {method, list_to_atom(string:to_lower(atom_to_list(Req:get(method))))}.
+
+get_headers(Req) ->
+  MochiwebHeaders = mochiweb_headers:to_list(Req:get(headers)),
+  {headers, [{to_list(K) , V} || {K,V} <- MochiwebHeaders]}.
+
+to_list(K) when is_atom(K) ->
+  atom_to_list(K);
+to_list(K) when is_binary(K) ->
+  binary_to_list(K);
+to_list(K) when is_list(K) ->
+  K.
+  
+get_body(Req) ->
+  {body, extract_body(Req:recv_body())}.
+extract_body(undefined) ->
+  <<>>;
+extract_body(Body) ->
+  Body.
+
+  
 %---------------------------
 % Gen Server Implementation
 % --------------------------
