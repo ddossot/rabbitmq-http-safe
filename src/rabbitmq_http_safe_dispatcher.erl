@@ -52,8 +52,16 @@ handle_call(InvalidMessage, _From, State) ->
 handle_cast(_, State) ->
   {noreply, State}.
 
-handle_info(Info, State) ->
-  io:format("~n~1024p~n", [Info]),
+handle_info({#'basic.deliver'{delivery_tag = Tag}, Message=#amqp_msg{props = Props = #'P_basic'{}}},
+            State=#state{channel = Channel}) ->
+  
+  % FIXME dispatch with ibrowse, if failed send to minute retry queue, ack in all cases  
+  io:format("~n~1024p~n", [[Tag, Message]]),
+  
+  amqp_channel:call(Channel, #'basic.ack'{delivery_tag = Tag}),
+  {noreply, State};
+
+handle_info(_, State) ->
   {noreply, State}.
 
 terminate(_, #state{connection = Connection, channel = Channel}) ->

@@ -28,7 +28,15 @@
                                                                
 -define(CID_HEADER, "X-SAFE-Correlation-Id").
 -define(TARGET_URI_HEADER, "X-SAFE-Target-URI").
--define(TARGET_MAX_RETRIES_HEADER, "X-SAFE-Max-Retries").
--define(TARGET_RETRY_INTERVAL_HEADER, "X-SAFE-Retry-Interval").
+-define(ACCEPT_REGEX_HEADER, "X-SAFE-Accept-Regex").
+-define(MAX_RETRIES_HEADER, "X-SAFE-Max-Retries").
+-define(RETRY_INTERVAL_HEADER, "X-SAFE-Retry-Interval").
 -define(CALLBACK_URI_HEADER, "X-SAFE-Callback-URI").
+
+-define(NOT_PROPAGATED_HEADERS, [?TARGET_URI_HEADER,
+                                 ?ACCEPT_REGEX_HEADER,
+                                 ?MAX_RETRIES_HEADER,
+                                 ?RETRY_INTERVAL_HEADER,
+                                 ?CALLBACK_URI_HEADER,
+                                 "Host"]).
 
