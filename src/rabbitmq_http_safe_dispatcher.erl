@@ -40,6 +40,10 @@ init([]) ->
   amqp_channel:call(Channel, #'queue.bind'{queue = ?PENDING_REQUESTS_QUEUE,
                                            exchange = ?PENDING_REQUESTS_EXCHANGE}),
                                            
+
+  % we want a strict flow control
+  amqp_channel:call(Channel, #'basic.qos'{prefetch_count = 0}),
+                                           
   amqp_channel:subscribe(Channel, #'basic.consume'{queue = ?PENDING_REQUESTS_QUEUE,
                                                    no_ack = false},
                          self()),
