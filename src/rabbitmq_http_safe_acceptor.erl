@@ -67,8 +67,14 @@ build_http_request(Req) ->
         undefined ->
           {max_retries, 0};
         MaxRetriesString ->
-          try {max_retries, list_to_integer(MaxRetriesString)}
-          catch _:_ -> error_invalid_header(?MAX_RETRIES_HEADER)
+          try list_to_integer(MaxRetriesString) of
+            MaxRetries when MaxRetries >= 0 ->
+              {max_retries, MaxRetries};
+            _ ->
+              error_invalid_header(?MAX_RETRIES_HEADER)
+          catch
+            _:_ ->
+              error_invalid_header(?MAX_RETRIES_HEADER)
           end
       end
     end,
