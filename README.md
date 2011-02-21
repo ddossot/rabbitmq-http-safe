@@ -17,5 +17,11 @@ RabbitMQ HTTP SAFE (Store And Forward Engine)
 
 A store-and-forward HTTP gateway plug-in for RabbitMQ.
 
+## Usage
 
-XXX Limited to 1MB payloads
+TBD
+
+## Limitations
+
+* The maximum size of an HTTP entity that can be stored-and-forwarded is 1MB.
+

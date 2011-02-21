@@ -24,13 +24,13 @@ start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
   
 handle(Req) ->
-  % FIXME support TARGET_RETRY_INTERVAL_HEADER, if TARGET_MAX_RETRIES_HEADER > 0
-  
-  io:format("~n~1024p~n", [build_http_request(Req)]),
-  
-  handle(Req,
-         Req:get_header_value(?TARGET_URI_HEADER),
-         Req:get_header_value(?MAX_RETRIES_HEADER)).
+  case build_http_request(Req) of
+    {ok, CorrelationId, HttpRequest} ->
+      gen_server:cast(?SERVER, HttpRequest),
+      Req:respond({204, [{?CID_HEADER, CorrelationId}], []});
+    {error, Cause} ->
+      Req:respond({400, [], Cause})
+  end.
          
 build_http_request(Req) ->
   % build the internal HTTP request representation by applying a succession of functions to the incoming request
@@ -98,19 +98,28 @@ build_http_request(Req) ->
     end,
   
   HeaderFuns = [TargetUriFun, AcceptRegexFun, MaxRetriesFun, RetryIntervalFun],
-  build_http_request(HeaderFuns, [{retry_count, 0},
-                                   get_method(Req),
-                                   get_headers(Req),
-                                   get_body(Req)]).
+  
+  case build_http_request_props(HeaderFuns, []) of
+    Error = {error, _} ->
+      Error;
+    {ok, Props} ->
+      CorrelationId = rabbit_guid:string_guid("safe-"),
+      % TODO support HTTP version(?)
+      {ok, CorrelationId, {http_request, [{correlation_id, CorrelationId},
+                                          {retry_count, 0},
+                                          get_method(Req),
+                                          get_headers(Req),
+                                          get_body(Req)] ++ Props}}
+  end.
 
-build_http_request([], HttpRequest) ->
-  {ok, {http_request, lists:flatten(HttpRequest)}};
-build_http_request([HeaderFun|HeaderFuns], Headers) ->
+build_http_request_props([], HttpRequest) ->
+  {ok, lists:flatten(HttpRequest)};
+build_http_request_props([HeaderFun|HeaderFuns], Headers) ->
   case HeaderFun(Headers) of
     Error = {error, _} ->
       Error;
     Header ->
-      build_http_request(HeaderFuns, [Header|Headers])
+      build_http_request_props(HeaderFuns, [Header|Headers])
   end.
 
 error_missing_header(HeaderName) when is_list(HeaderName) ->
@@ -118,42 +127,30 @@ error_missing_header(HeaderName) when is_list(HeaderName) ->
 
 error_invalid_header(HeaderName) when is_list(HeaderName) ->
   {error, "Invalid value for header: " ++ HeaderName}.
-  
-handle(Req, undefined, _) ->
-  Req:respond({400, [], "Missing mandatory header: " ++ ?TARGET_URI_HEADER});
-handle(Req, _, undefined) ->
-  Req:respond({400, [], "Missing mandatory header: " ++ ?MAX_RETRIES_HEADER});
-handle(Req, TargetUri, MaxRetriesString)
-  when is_list(TargetUri), is_list(MaxRetriesString) ->
-  handle(Req, TargetUri, catch(list_to_integer(MaxRetriesString)));
-handle(Req, TargetUri, MaxRetries)
-  when is_list(TargetUri), is_integer(MaxRetries) ->
-  CorrelationId = rabbit_guid:string_guid("safe-"),
-  gen_server:cast(?SERVER,
-                  {http_request, [
-                                  {correlation_id, CorrelationId},
-                                  {target_uri, TargetUri},
-                                  {max_retries, MaxRetries},
-                                  {retry_count, 0},
-                                  get_method(Req),
-                                  get_headers(Req),
-                                  get_body(Req)
-                                 ]}),
-  % TODO support HTTP version
-  Req:respond({204, [{?CID_HEADER, CorrelationId}], []});
-handle(Req, _, MaxRetries)
-  when is_integer(MaxRetries) ->
-  Req:respond({400, [], "Invalid value for header: " ++ ?TARGET_URI_HEADER});
-handle(Req, TargetUri, _)
-  when is_list(TargetUri) ->
-  Req:respond({400, [], "Invalid value for header: " ++ ?MAX_RETRIES_HEADER}).
 
 get_method(Req) ->
   {method, list_to_atom(string:to_lower(atom_to_list(Req:get(method))))}.
 
 get_headers(Req) ->
   MochiwebHeaders = mochiweb_headers:to_list(Req:get(headers)),
-  {headers, [{to_list(K) , V} || {K,V} <- MochiwebHeaders]}.
+  
+  NotPropagatedHeadersLower = [string:to_lower(H) || H <- ?NOT_PROPAGATED_HEADERS],
+  
+  Headers =
+    lists:foldl(
+      fun({Name, Value}, Acc) ->
+        NameAsString = to_list(Name),
+        case lists:member(string:to_lower(NameAsString), NotPropagatedHeadersLower) of
+          true ->
+            Acc;
+          false ->
+            [{NameAsString, Value} | Acc]
+        end
+      end,
+      [],
+      MochiwebHeaders),
+      
+  {headers, lists:flatten(Headers)}.
 
 to_list(K) when is_atom(K) ->
   atom_to_list(K);
@@ -184,8 +181,8 @@ init([]) ->
 handle_call(InvalidMessage, _From, State) ->
   {reply, {error, {invalid_message, InvalidMessage}}, State}.
 
-handle_cast(HttpRequest = {http_request, Fields}, State=#state{channel = Channel})
-  when is_list(Fields)->
+handle_cast(HttpRequest = {http_request, Props}, State=#state{channel = Channel})
+  when is_list(Props)->
   
   Properties = #'P_basic'{content_type = ?ERLANG_BINARY_TERM_CONTENT_TYPE,
                           delivery_mode = 2},
