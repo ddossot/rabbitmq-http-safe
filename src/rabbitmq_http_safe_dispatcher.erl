@@ -93,39 +93,67 @@ dispatch(HttpRequest = {http_request, Props}, Channel) ->
                          HttpRequest,
                          Channel).
   
-handle_dispatch_result({ok, Status,ResponseHeaders, ResponseBody}, HttpRequest = {http_request, Props}, Channel) ->
+handle_dispatch_result({ok, Status, ResponseHeaders, ResponseBody}, HttpRequest = {http_request, Props}, Channel) ->
   AcceptRegexString = proplists:get_value(accept_regex, Props),
   {ok, AcceptRegex} = re:compile(AcceptRegexString),
   case re:run(Status, AcceptRegex) of
     nomatch ->
       handle_failed_dispatch({error, Status ++ " didn't match accept regex: " ++ AcceptRegexString},
                              HttpRequest,
+                             Status, ResponseHeaders, ResponseBody,
                              Channel);
     _ ->
       handle_successfull_dispatch(HttpRequest, Status, ResponseHeaders, ResponseBody)
   end;
 handle_dispatch_result(Error, HttpRequest, Channel) ->
-  handle_failed_dispatch(Error, HttpRequest, Channel).
+  handle_failed_dispatch(Error, HttpRequest, undefined, undefined, undefined, Channel).
 
-handle_failed_dispatch(Error, HttpRequest, Channel) ->
-  % FIXME implement missing features:
-  % - check if max attempt has been reached
-  %  - if yes, route failure if a callback URI exists
-  % - else send to retrying exchange with rkey=current sec + try interval
-  error_logger:error_msg("Failed to dispatch: ~p with error: ~p", [HttpRequest, Error]).
+handle_failed_dispatch(Error, HttpRequest = {http_request, Props}, Status, ResponseHeaders, ResponseBody, Channel) ->
+  MaxRetries = proplists:get_value(max_retries, Props),
+  RetryCount = proplists:get_value(retry_count, Props),
   
-handle_successfull_dispatch({http_request, Props}, Status, ResponseHeaders, ResponseBody) ->
+  error_logger:error_msg("Failed (~B/~B) forwarding: ~p with error: ~p",
+                         [RetryCount, MaxRetries, HttpRequest, Error]),
+  
+  if
+    RetryCount >= MaxRetries ->
+      handle_aborted_dispatch(HttpRequest, Status, ResponseHeaders, ResponseBody);
+    true ->
+      % FIXME send to retrying exchange with rkey=current sec + try interval
+      ok
+  end.
+  
+handle_successfull_dispatch(HttpRequest, Status, ResponseHeaders, ResponseBody) ->
+  dispatch_callback(HttpRequest,
+                    [
+                     {?FORWARD_OUTCOME_HEADER, "success"},
+                     {?FORWARD_STATUS_HEADER, Status}
+                     ]
+                    ++ ResponseHeaders,
+                    ResponseBody).
+
+
+handle_aborted_dispatch(HttpRequest, undefined, undefined, undefined) ->
+  dispatch_callback(HttpRequest,
+                    [{?FORWARD_OUTCOME_HEADER, "failure"}],
+                    <<>>);
+
+handle_aborted_dispatch(HttpRequest, Status, ResponseHeaders, ResponseBody) ->
+  dispatch_callback(HttpRequest,
+                    [
+                     {?FORWARD_OUTCOME_HEADER, "failure"},
+                     {?FORWARD_STATUS_HEADER, Status}
+                     ]
+                    ++ ResponseHeaders,
+                    ResponseBody).
+
+dispatch_callback({http_request, Props}, CallbackHeaders, ResponseBody) ->
   case proplists:get_value(callback_uri, Props) of
     CallbackUri when is_list(CallbackUri) ->
-      % FIXME build JSON success message
       rabbitmq_http_safe_acceptor:dispatch({http_request, [proplists:lookup(correlation_id, Props),
                                                            {accept_regex, ".*"},
                                                            {target_uri, CallbackUri},
-                                                           {headers, [
-                                                                      {?FORWARD_OUTCOME_HEADER, "success"},
-                                                                      {?FORWARD_STATUS_HEADER, Status}
-                                                                      ]
-                                                                     ++ ResponseHeaders},
+                                                           {headers, CallbackHeaders},
                                                            {method, post},
                                                            {body, ResponseBody}
                                                            ]});
