@@ -59,7 +59,7 @@ handle_cast(_, State) ->
 handle_info({#'basic.deliver'{delivery_tag = Tag}, #amqp_msg{payload = Payload}},
             State=#state{channel = Channel}) ->
   
-  dispatch(binary_to_term(Payload)),
+  dispatch(binary_to_term(Payload), Channel),
   
   amqp_channel:call(Channel, #'basic.ack'{delivery_tag = Tag}),
   {noreply, State};
@@ -78,18 +78,54 @@ code_change(_OldVsn, State, _Extra) ->
 %---------------------------
 % Support Functions
 % --------------------------
-dispatch({http_request, Props}) when is_list(Props) ->
+dispatch(HttpRequest = {http_request, Props}, Channel) ->
+  
   CorrelationId = proplists:get_value(correlation_id, Props),
+  
   TargetUri = proplists:get_value(target_uri, Props),
   Headers = proplists:get_value(headers, Props) ++ [{?CID_HEADER, CorrelationId}],
   Method = proplists:get_value(method, Props),
   Body = proplists:get_value(body, Props),
   
   DispatchResult = (catch ibrowse:send_req(TargetUri, Headers, Method, Body)),
-  handle_dispatch_result(DispatchResult).
   
-handle_dispatch_result(DispatchResult) ->
-  % FIXME handle errors, apply regex, sasl log failures, send to minute retry queue
-  io:format("~n--->~1024p~n", [DispatchResult]),
-  ok.
+  handle_dispatch_result(DispatchResult,
+                         HttpRequest,
+                         Channel).
+  
+handle_dispatch_result({ok, Status, _, _}, HttpRequest = {http_request, Props}, Channel) ->
+  AcceptRegexString = proplists:get_value(accept_regex, Props),
+  {ok, AcceptRegex} = re:compile(AcceptRegexString),
+  case re:run(Status, AcceptRegex) of
+    nomatch ->
+      handle_failed_dispatch({error, Status ++ " didn't match accept regex: " ++ AcceptRegexString},
+                             HttpRequest,
+                             Channel);
+    _ ->
+      handle_successfull_dispatch(HttpRequest)
+  end;
+handle_dispatch_result(Error, HttpRequest, Channel) ->
+  handle_failed_dispatch(Error, HttpRequest, Channel).
+
+handle_failed_dispatch(Error, HttpRequest, Channel) ->
+  % FIXME implement missing features:
+  % - check if max attempt has been reached
+  %  - if yes, route failure if a callback URI exists
+  % - else send to retrying exchange with rkey=current sec + try interval
+  error_logger:error_msg("Failed to dispatch: ~p with error: ~p", [HttpRequest, Error]).
+  
+handle_successfull_dispatch({http_request, Props}) ->
+  case proplists:get_value(callback_uri, Props) of
+    CallbackUri when is_list(CallbackUri) ->
+      % FIXME build JSON success message
+      rabbitmq_http_safe_acceptor:dispatch({http_request, [proplists:lookup(correlation_id, Props),
+                                                           {accept_regex, ".*"},
+                                                           {target_uri, CallbackUri},
+                                                           {headers, [{?STATUS_HEADER, "success"}]},
+                                                           {method, post},
+                                                           {body, <<"SUCCESS!!!">>}
+                                                           ]});
+    _ ->
+      ok
+  end.
 

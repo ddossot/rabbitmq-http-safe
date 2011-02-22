@@ -11,7 +11,7 @@
 
 -include("rabbitmq_http_safe.hrl").
 
--export([start_link/0, handle/1]).
+-export([start_link/0, handle/1, dispatch/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -26,11 +26,14 @@ start_link() ->
 handle(Req) ->
   case build_http_request(Req) of
     {ok, CorrelationId, HttpRequest} ->
-      gen_server:cast(?SERVER, HttpRequest),
+      dispatch(HttpRequest),
       Req:respond({204, [{?CID_HEADER, CorrelationId}], []});
     {error, Cause} ->
       Req:respond({400, [], Cause})
   end.
+  
+dispatch(HttpRequest = {http_request, Props}) when is_list(Props) ->
+  gen_server:cast(?SERVER, HttpRequest).
          
 build_http_request(Req) ->
   % build the internal HTTP request representation by applying a succession of functions to the incoming request
@@ -96,7 +99,7 @@ build_http_request(Req) ->
           end
       end
     end,
-  
+    
   HeaderFuns = [TargetUriFun, AcceptRegexFun, MaxRetriesFun, RetryIntervalFun],
   
   case build_http_request_props(HeaderFuns, []) of
@@ -107,6 +110,7 @@ build_http_request(Req) ->
       % TODO support HTTP version(?)
       {ok, CorrelationId, {http_request, [{correlation_id, CorrelationId},
                                           {retry_count, 0},
+                                          get_callback_uri(Req),
                                           get_method(Req),
                                           get_headers(Req),
                                           get_body(Req)] ++ Props}}
@@ -118,6 +122,8 @@ build_http_request_props([HeaderFun|HeaderFuns], Headers) ->
   case HeaderFun(Headers) of
     Error = {error, _} ->
       Error;
+    undefined ->
+      build_http_request_props(HeaderFuns, Headers);
     Header ->
       build_http_request_props(HeaderFuns, [Header|Headers])
   end.
@@ -127,6 +133,9 @@ error_missing_header(HeaderName) when is_list(HeaderName) ->
 
 error_invalid_header(HeaderName) when is_list(HeaderName) ->
   {error, "Invalid value for header: " ++ HeaderName}.
+
+get_callback_uri(Req) ->
+    {callback_uri, Req:get_header_value(?CALLBACK_URI_HEADER)}.
 
 get_method(Req) ->
   {method, list_to_atom(string:to_lower(atom_to_list(Req:get(method))))}.

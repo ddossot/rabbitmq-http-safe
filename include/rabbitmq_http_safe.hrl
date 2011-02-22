@@ -32,6 +32,7 @@
 -define(MAX_RETRIES_HEADER, "X-SAFE-Max-Retries").
 -define(RETRY_INTERVAL_HEADER, "X-SAFE-Retry-Interval").
 -define(CALLBACK_URI_HEADER, "X-SAFE-Callback-URI").
+-define(STATUS_HEADER, "X-SAFE-Status").
 
 -define(NOT_PROPAGATED_HEADERS, [?TARGET_URI_HEADER,
                                  ?ACCEPT_REGEX_HEADER,
