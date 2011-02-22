@@ -59,8 +59,7 @@ handle_cast(_, State) ->
 handle_info({#'basic.deliver'{delivery_tag = Tag}, #amqp_msg{payload = Payload}},
             State=#state{channel = Channel}) ->
   
-  % FIXME dispatch with ibrowse, if failed send to minute retry queue, ack in all cases  
-  io:format("~n~1024p~n", [binary_to_term(Payload)]),
+  dispatch(binary_to_term(Payload)),
   
   amqp_channel:call(Channel, #'basic.ack'{delivery_tag = Tag}),
   {noreply, State};
@@ -75,4 +74,22 @@ terminate(_, #state{connection = Connection, channel = Channel}) ->
 
 code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
+
+%---------------------------
+% Support Functions
+% --------------------------
+dispatch({http_request, Props}) when is_list(Props) ->
+  CorrelationId = proplists:get_value(correlation_id, Props),
+  TargetUri = proplists:get_value(target_uri, Props),
+  Headers = proplists:get_value(headers, Props) ++ [{?CID_HEADER, CorrelationId}],
+  Method = proplists:get_value(method, Props),
+  Body = proplists:get_value(body, Props),
+  
+  DispatchResult = (catch ibrowse:send_req(TargetUri, Headers, Method, Body)),
+  handle_dispatch_result(DispatchResult).
+  
+handle_dispatch_result(DispatchResult) ->
+  % FIXME handle errors, apply regex, sasl log failures, send to minute retry queue
+  io:format("~n--->~1024p~n", [DispatchResult]),
+  ok.
 
