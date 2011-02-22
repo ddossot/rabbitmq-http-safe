@@ -93,7 +93,7 @@ dispatch(HttpRequest = {http_request, Props}, Channel) ->
                          HttpRequest,
                          Channel).
   
-handle_dispatch_result({ok, Status, _, _}, HttpRequest = {http_request, Props}, Channel) ->
+handle_dispatch_result({ok, Status,ResponseHeaders, ResponseBody}, HttpRequest = {http_request, Props}, Channel) ->
   AcceptRegexString = proplists:get_value(accept_regex, Props),
   {ok, AcceptRegex} = re:compile(AcceptRegexString),
   case re:run(Status, AcceptRegex) of
@@ -102,7 +102,7 @@ handle_dispatch_result({ok, Status, _, _}, HttpRequest = {http_request, Props}, 
                              HttpRequest,
                              Channel);
     _ ->
-      handle_successfull_dispatch(HttpRequest)
+      handle_successfull_dispatch(HttpRequest, Status, ResponseHeaders, ResponseBody)
   end;
 handle_dispatch_result(Error, HttpRequest, Channel) ->
   handle_failed_dispatch(Error, HttpRequest, Channel).
@@ -114,16 +114,20 @@ handle_failed_dispatch(Error, HttpRequest, Channel) ->
   % - else send to retrying exchange with rkey=current sec + try interval
   error_logger:error_msg("Failed to dispatch: ~p with error: ~p", [HttpRequest, Error]).
   
-handle_successfull_dispatch({http_request, Props}) ->
+handle_successfull_dispatch({http_request, Props}, Status, ResponseHeaders, ResponseBody) ->
   case proplists:get_value(callback_uri, Props) of
     CallbackUri when is_list(CallbackUri) ->
       % FIXME build JSON success message
       rabbitmq_http_safe_acceptor:dispatch({http_request, [proplists:lookup(correlation_id, Props),
                                                            {accept_regex, ".*"},
                                                            {target_uri, CallbackUri},
-                                                           {headers, [{?STATUS_HEADER, "success"}]},
+                                                           {headers, [
+                                                                      {?FORWARD_OUTCOME_HEADER, "success"},
+                                                                      {?FORWARD_STATUS_HEADER, Status}
+                                                                      ]
+                                                                     ++ ResponseHeaders},
                                                            {method, post},
-                                                           {body, <<"SUCCESS!!!">>}
+                                                           {body, ResponseBody}
                                                            ]});
     _ ->
       ok
