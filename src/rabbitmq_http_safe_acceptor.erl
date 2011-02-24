@@ -86,7 +86,7 @@ build_http_request(Req) ->
     fun(Headers) ->
       case proplists:get_value(max_retries, Headers) of
         0 ->
-          undefined;
+          {retry_interval, undefined};
         _ ->
           try list_to_integer(Req:get_header_value(?RETRY_INTERVAL_HEADER)) of
             RetryInterval when RetryInterval > 0 andalso RetryInterval =< 60 ->

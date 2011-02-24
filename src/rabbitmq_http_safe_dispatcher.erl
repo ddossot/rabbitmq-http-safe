@@ -31,6 +31,8 @@ init([]) ->
   {ok, Connection} = amqp_connection:start(direct, ?CONNECTION_PARAMS),
   {ok, Channel} = amqp_connection:open_channel(Connection),
   
+  amqp_channel:call(Channel, ?DECLARE_RETRY_REQUESTS_EXCHANGE),
+
   amqp_channel:call(Channel, ?DECLARE_PENDING_REQUESTS_EXCHANGE),
   
   amqp_channel:call(Channel, #'queue.declare'{queue = ?PENDING_REQUESTS_QUEUE,
@@ -119,8 +121,18 @@ handle_failed_dispatch(Error, HttpRequest = {http_request, Props}, Status, Respo
     RetryCount >= MaxRetries ->
       handle_aborted_dispatch(HttpRequest, Status, ResponseHeaders, ResponseBody);
     true ->
-      % FIXME send to retrying exchange with rkey=current sec + try interval
-      ok
+      RetriedHttpRequest =
+        {http_request, [{retry_count, RetryCount+1}|proplists:delete(retry_count, Props)]},
+        
+      RetryInterval = proplists:get_value(retry_interval, Props),
+      RetryMinute = get_retry_minute(RetryInterval),
+      
+      Properties = #'P_basic'{content_type = ?ERLANG_BINARY_TERM_CONTENT_TYPE,
+                              delivery_mode = 2},
+      BasicPublish = #'basic.publish'{exchange = ?RETRY_REQUESTS_EXCHANGE,
+                                      routing_key = list_to_binary(integer_to_list(RetryMinute))},
+      Content = #amqp_msg{props = Properties, payload = term_to_binary(RetriedHttpRequest)},
+      amqp_channel:call(Channel, BasicPublish, Content)
   end.
   
 handle_successfull_dispatch(HttpRequest, Status, ResponseHeaders, ResponseBody) ->
@@ -151,13 +163,25 @@ dispatch_callback({http_request, Props}, CallbackHeaders, ResponseBody) ->
   case proplists:get_value(callback_uri, Props) of
     CallbackUri when is_list(CallbackUri) ->
       rabbitmq_http_safe_acceptor:dispatch({http_request, [proplists:lookup(correlation_id, Props),
+                                                           proplists:lookup(max_retries, Props),
+                                                           proplists:lookup(retry_interval, Props),
+                                                           {retry_count, 0},
                                                            {accept_regex, ".*"},
                                                            {target_uri, CallbackUri},
                                                            {headers, CallbackHeaders},
                                                            {method, post},
-                                                           {body, ResponseBody}
-                                                           ]});
+                                                           {body, ResponseBody}]});
     _ ->
       ok
+  end.
+
+get_retry_minute(RetryInterval) ->
+  {_,{_,CurrentMinute,_}} = calendar:now_to_datetime(erlang:now()),
+  
+  case CurrentMinute + RetryInterval of
+    ValidMinute when ValidMinute < 60 ->
+      ValidMinute;
+    OverFlowedMinute ->
+      OverFlowedMinute - 60
   end.
 

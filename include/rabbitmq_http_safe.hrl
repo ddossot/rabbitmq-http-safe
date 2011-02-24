@@ -21,8 +21,14 @@
                                                                durable = true,
                                                                auto_delete = false}).
 
-
 -define(PENDING_REQUESTS_QUEUE, <<"pending_requests.queue">>).
+
+-define(RETRY_REQUESTS_EXCHANGE, <<"retry_requests.exchange">>).
+
+-define(DECLARE_RETRY_REQUESTS_EXCHANGE, #'exchange.declare'{exchange = ?RETRY_REQUESTS_EXCHANGE,
+                                                             type = <<"direct">>,
+                                                             durable = true,
+                                                             auto_delete = false}).
 
 -define(ERLANG_BINARY_TERM_CONTENT_TYPE, <<"application/vnd.erlang.term">>).
                                                                
