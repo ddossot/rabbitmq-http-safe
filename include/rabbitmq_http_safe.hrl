@@ -48,3 +48,5 @@
                                  ?CALLBACK_URI_HEADER,
                                  "Host"]).
 
+-define(RETRY_INTERVAL_MILLIS, 60000).
+
