@@ -12,12 +12,10 @@
 
 -export([start/2, stop/1]).
 
--define(PREFIX, "http-safe").
-
 start(normal, []) ->
   rabbitmq_setup(),
 
-  rabbit_mochiweb:register_context_handler(?PREFIX,
+  rabbit_mochiweb:register_context_handler(?ACCEPTOR_URI_CONTEXT,
                                            fun rabbitmq_http_safe_acceptor:handle/1,
                                            "HTTP SAFE"),
 

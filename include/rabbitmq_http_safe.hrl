@@ -6,6 +6,9 @@
 %%% Copyright (c) 2011 David Dossot
 %%%
 
+-define(URI_CONTEXT_PREFIX, "http-safe/").
+-define(ACCEPTOR_URI_CONTEXT, ?URI_CONTEXT_PREFIX ++ "in").
+
 -define(USERNAME, <<"http_safe_user">>).
 -define(PASSWORD, <<"http_safe_pwd">>).
 -define(VHOST, <<"http_safe">>).

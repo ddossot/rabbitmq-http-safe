@@ -41,7 +41,6 @@ init([]) ->
   
   amqp_channel:call(Channel, #'queue.bind'{queue = ?PENDING_REQUESTS_QUEUE,
                                            exchange = ?PENDING_REQUESTS_EXCHANGE}),
-                                           
 
   % we want a strict flow control
   amqp_channel:call(Channel, #'basic.qos'{prefetch_count = 0}),
@@ -114,8 +113,8 @@ handle_failed_dispatch(Error, HttpRequest = {http_request, Props}, Status, Respo
   MaxRetries = proplists:get_value(max_retries, Props),
   RetryCount = proplists:get_value(retry_count, Props),
   
-  error_logger:error_msg("Failed (~B/~B) forwarding: ~p with error: ~p",
-                         [RetryCount, MaxRetries, HttpRequest, Error]),
+  rabbit_log:error("Failed (~B/~B) forwarding: ~p with error: ~p",
+                   [RetryCount, MaxRetries, HttpRequest, Error]),
   
   if
     RetryCount >= MaxRetries ->

@@ -31,7 +31,19 @@ init([]) ->
   
   amqp_channel:call(Channel, ?DECLARE_RETRY_REQUESTS_EXCHANGE),
   
-  % FIXME create 60 minute queues and bind them
+  lists:foreach(
+    fun(Minute) ->
+      MinuteQueue = get_minute_queue(Minute),
+      
+      amqp_channel:call(Channel, #'queue.declare'{queue = MinuteQueue,
+                                                  durable = true,
+                                                  auto_delete = false}),
+  
+      amqp_channel:call(Channel, #'queue.bind'{queue = MinuteQueue,
+                                               routing_key = list_to_binary(integer_to_list(Minute)),
+                                               exchange = ?RETRY_REQUESTS_EXCHANGE})
+    end,
+    lists:seq(0, 59)),
   
   catch amqp_channel:close(Channel),
   catch amqp_connection:close(Connection),
@@ -39,6 +51,7 @@ init([]) ->
   
 handle_tick(_Reason, _State) ->
   % FIXME spawn a process that moves all current minute retry messages to main exchange
+  get_current_minute(),
   ok.
 
 handle_call(InvalidMessage, _From, State) ->
@@ -59,6 +72,9 @@ code_change(_OldVsn, State, _Extra) ->
 %---------------------------
 % Support Functions
 % --------------------------
+get_minute_queue(Minute) ->
+  list_to_binary("retry_requests_" ++ integer_to_list(Minute) ++ ".queue").
+  
 get_current_minute() ->
   {_,{_,CurrentMinute,_}} = calendar:now_to_datetime(erlang:now()),
   CurrentMinute.
