@@ -62,8 +62,7 @@ Here are the HTTP headers that you must/can include in your request to http-safe
 <tr><td>X-SAFE-Max-Retries</td><td>No</td><td>Number of resend attempts to perform if the first dispatch failed. Default is 0.</td></tr>
 <tr><td>X-SAFE-Retry-Interval</td><td>Yes if X-SAFE-Max-Retries &gt; 0</td><td>The number of minutes between two dispatch attempts. Must be &gt;0 and &lt;=60.</td></tr>
 <tr><td>X-SAFE-Callback-URI</td><td>No</td><td>The URI of a server to call in case of successfull or aborted (ie. all attempts failed) dispatch.</td></tr>
-<table>
-
+</table>
 
 In addition to the X-SAFE-Correlation-Id header shown above, http-safe can add the following headers when it calls you back:
 
