@@ -46,7 +46,7 @@ If you're not happy with the port it's listening on, you'll need to configure th
 
 Using http-safe is very straightforward: you simply send it the HTTP request your intending to send to a server, using whatever verb you want, and just add a few control headers. http-safe will then try to send it to the intended recipient as fast as it can, retrying as much and as often as configured. In case of success or failure, it can optionally call you back.
 
-After sending to *http://<rabbit_host>:55672/http-safe/in*, http-safe responds:
+After sending to **http://<rabbit_host>:55672/http-safe/in**, http-safe responds:
 
     204
     X-SAFE-Correlation-Id: <correlation_id>
