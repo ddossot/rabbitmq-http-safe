@@ -15,7 +15,7 @@
 RabbitMQ HTTP SAFE (Store And Forward Engine)
 =============================================
 
-A store-and-forward HTTP gateway plugin for RabbitMQ 2.3.1.
+A store-and-forward HTTP gateway plugin for RabbitMQ.
 
 ## Goal
 
@@ -27,7 +27,7 @@ http-safe goes beyond the fire and forget paradigm as it supports the notion of 
 
 ## Installation
 
-In order to use the http-safe plugin, you need first to install the following plugins:
+In order to use the http-safe plugin, you need first to install the following plugins on RabbitMQ 2.3.1:
 
 - [amqp_client](http://www.rabbitmq.com/releases/plugins/v2.3.1/amqp_client-2.3.1.ez)
 - [mochiweb](http://www.rabbitmq.com/releases/plugins/v2.3.1/mochiweb-2.3.1.ez)
