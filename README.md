@@ -64,13 +64,15 @@ Here are the HTTP headers that you must/can include in your request to http-safe
 <tr><td>X-SAFE-Callback-URI</td><td>No</td><td>The URI of a server to call in case of successfull or aborted (ie. all attempts failed) dispatch.</td></tr>
 <table>
 
+
 In addition to the X-SAFE-Correlation-Id header shown above, http-safe can add the following headers when it calls you back:
 
-- X-SAFE-Forward-Outcome: 'success' or 'failure',
-- X-SAFE-Forward-Status: the status code replied by the target server.
+* X-SAFE-Forward-Outcome: 'success' or 'failure',
+* X-SAFE-Forward-Status: the status code replied by the target server.
 
 ## Limitations
 
-- The maximum size of an HTTP entity that can be stored-and-forwarded is 1MB.
+* The maximum size of an HTTP entity that can be stored-and-forwarded is 1MB.
 
 #### Copyright 2011 - David Dossot - MIT License
+
