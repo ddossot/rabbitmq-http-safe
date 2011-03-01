@@ -51,7 +51,18 @@ init([]) ->
   
 handle_tick(_Reason, _State) ->
   % FIXME spawn a process that moves all current minute retry messages to main exchange
-  get_current_minute(),
+  {ok, Connection} = amqp_connection:start(direct, ?CONNECTION_PARAMS),
+  {ok, Channel} = amqp_connection:open_channel(Connection),
+    
+  #'tx.select_ok'{} = amqp_channel:call(Channel, #'tx.select'{}),
+  
+  MinuteQueue = get_minute_queue(get_current_minute()),
+  drain_to_pending_request(MinuteQueue, Channel),
+
+  #'tx.commit_ok'{} = amqp_channel:call(Channel, #'tx.commit'{}),
+  
+  catch amqp_channel:close(Channel),
+  catch amqp_connection:close(Connection),
   ok.
 
 handle_call(InvalidMessage, _From, State) ->
@@ -78,4 +89,13 @@ get_minute_queue(Minute) ->
 get_current_minute() ->
   {_,{_,CurrentMinute,_}} = calendar:now_to_datetime(erlang:now()),
   CurrentMinute.
+
+drain_to_pending_request(MinuteQueue, Channel) ->
+  case amqp_channel:call(Channel, #'basic.get'{queue = MinuteQueue, no_ack = true}) of
+    {#'basic.get_ok'{}, Message} ->
+      BasicPublish = #'basic.publish'{exchange = ?PENDING_REQUESTS_EXCHANGE},
+      amqp_channel:call(Channel, BasicPublish, Message);
+    _ ->
+      ok
+  end.
 
