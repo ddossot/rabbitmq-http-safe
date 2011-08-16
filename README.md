@@ -74,4 +74,3 @@ In addition to the X-SAFE-Correlation-Id header shown above, http-safe can add t
 * The maximum size of an HTTP entity that can be stored-and-forwarded is 1MB.
 
 #### Copyright 2011 - David Dossot - MIT License
-
